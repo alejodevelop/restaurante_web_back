@@ -18,6 +18,7 @@ import org.springframework.stereotype.Repository;
 import com.usco.edu.dao.IGrupoGabuDao;
 import com.usco.edu.entities.GrupoGabu;
 import com.usco.edu.resultSetExtractor.GrupoGabuSetExtractor;
+import com.usco.edu.resultSetExtractor.ReporteVentaSetExtractor;
 import com.usco.edu.util.AuditoriaJdbcTemplate;
 
 @Repository
@@ -60,11 +61,11 @@ public class GrupoGabuDaoImpl implements IGrupoGabuDao {
 				+ "INNER JOIN dbo.programa pr ON e.pro_codigo = pr.pro_codigo "
 				+ "INNER JOIN dbo.uaa u ON pr.uaa_codigo = u.uaa_codigo "
 				+ "INNER JOIN dbo.dia d ON rdb.dia_codigo = d.dia_codigo "
-				+ "WHERE rgg.per_codigo = " + codigo + " AND GETDATE() <= rgg.rgg_vigencia "
+				+ "WHERE rgg.per_codigo = ? AND GETDATE() <= rgg.rgg_vigencia "
 				+ "AND rgg.rgg_estado = 1 "
 				+ "ORDER BY rgg.rgg_vigencia DESC;";
 		
-		return jdbcTemplate.query(sql, new GrupoGabuSetExtractor());
+		return jdbcTemplate.query(sql, new GrupoGabuSetExtractor(), codigo);
 	}
 
 	@Override

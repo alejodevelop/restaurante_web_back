@@ -1,5 +1,6 @@
 package com.usco.edu.restController;
 
+import java.io.IOException;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,8 +10,12 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.databind.JsonMappingException;
 import com.usco.edu.entities.Consumo;
 import com.usco.edu.entities.Qr;
 import com.usco.edu.service.IConsumoService;
@@ -48,8 +53,10 @@ public class ConsumoRestController {
 	}
 
 	@PostMapping(path = "cargue-informacion/{username}")
-	public List<Long> cargueInformacion(@PathVariable String username, @RequestBody List<Consumo> consumos) {
-		return consumoService.cargarConsumos(username, consumos);
+	public List<Long> cargueInformacion(@PathVariable String username, 
+            @RequestParam("jsonData") MultipartFile jsonData) throws JsonParseException, JsonMappingException, IOException {
+		List<Consumo> consumos_json = consumoService.convertirJsonAConsumos(jsonData);
+		return consumoService.cargarConsumos(username, consumos_json);
 	}
 
 	@PutMapping(path = "validar-consumo/{username}/{uaaCodigo}")

@@ -22,16 +22,26 @@ public class ReportesDaoImpl implements IReportesDao {
 	@Override
 	public List<ReporteVenta> obtenerReporteVentas(int sede, String inicio, String fin) {
 
-		String sql = "select * from sibusco.restaurante_venta rv "
-				+ "inner join dbo.persona p on rv.per_codigo = p.per_codigo "
-				+ "left join sibusco.restaurante_grupo_gabu rgg on rv.per_codigo = rgg.per_codigo "
-				+ "left join sibusco.restaurante_tipo_gabu rtg on rgg.rtg_codigo = rtg.rtg_codigo "
-				+ "inner join sibusco.restaurante_tipo_servicio rts on rv.rts_codigo = rts.rts_codigo "
-				+ "inner join sibusco.restaurante_contrato rc on rv.rco_codigo = rc.rco_codigo "
-				+ "inner join sibusco.restaurante_tipo_contrato rtc on rc.rtc_codigo = rtc.rtc_codigo "
-				+ "inner join sibusco.restaurante_sede rs on rv.uaa_codigo = rs.uaa_codigo "
-				+ "where rv.rve_eliminado != 0 and rv.uaa_codigo =  ? and CONVERT(DATE, rv.rve_fecha) BETWEEN ? AND ? "
-				+ "ORDER BY rv.rve_fecha desc, rv.rts_codigo asc; ";
+		String sql = "WITH VigenciaReciente AS ( " +
+		        "    SELECT rgg.per_codigo, MAX(rgg.rgg_vigencia) AS rgg_vigencia, MAX(rgg.rgg_codigo) AS rgg_codigo_reciente " +
+		        "    FROM sibusco.restaurante_grupo_gabu rgg " +
+		        "    WHERE rgg.rgg_vigencia >= CONVERT(DATE, GETDATE()) " +
+		        "    GROUP BY rgg.per_codigo " +
+		        ") " +
+		        "SELECT * FROM sibusco.restaurante_venta rv " +
+		        "INNER JOIN dbo.persona p ON rv.per_codigo = p.per_codigo " +
+		        "LEFT JOIN VigenciaReciente vr ON rv.per_codigo = vr.per_codigo " +
+		        "LEFT JOIN sibusco.restaurante_grupo_gabu rgg ON rv.per_codigo = rgg.per_codigo AND rgg.rgg_vigencia = vr.rgg_vigencia AND rgg.rgg_codigo = vr.rgg_codigo_reciente " +
+		        "LEFT JOIN sibusco.restaurante_tipo_gabu rtg ON rgg.rtg_codigo = rtg.rtg_codigo " +
+		        "INNER JOIN sibusco.restaurante_tipo_servicio rts ON rv.rts_codigo = rts.rts_codigo " +
+		        "INNER JOIN sibusco.restaurante_contrato rc ON rv.rco_codigo = rc.rco_codigo " +
+		        "INNER JOIN sibusco.restaurante_tipo_contrato rtc ON rc.rtc_codigo = rtc.rtc_codigo " +
+		        "INNER JOIN sibusco.restaurante_sede rs ON rv.uaa_codigo = rs.uaa_codigo " +
+		        "WHERE rv.rve_eliminado != 0 " +
+		        "AND rv.uaa_codigo = ? " +
+		        "AND CONVERT(DATE, rv.rve_fecha) BETWEEN ? AND ? " +
+		        "ORDER BY rv.rve_fecha DESC, rv.rts_codigo ASC;";
+
 		
 		return jdbcTemplate.query(sql, new ReporteVentaSetExtractor(), sede, inicio, fin);
 		

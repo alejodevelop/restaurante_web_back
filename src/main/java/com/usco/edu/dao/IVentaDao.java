@@ -1,7 +1,12 @@
 package com.usco.edu.dao;
 
+import java.io.IOException;
 import java.util.List;
 
+import org.springframework.web.multipart.MultipartFile;
+
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.databind.JsonMappingException;
 import com.usco.edu.entities.Venta;
 
 public interface IVentaDao {
@@ -15,6 +20,8 @@ public interface IVentaDao {
     public int registrarVentas(String userdb, List<Venta> ventas);
     
     public List<Long> cargarVentas(String userdb, List<Venta> ventas);
+    
+	public List<Venta> convertirJsonAVentas(MultipartFile jsonData) throws JsonParseException, JsonMappingException, IOException;
 
     public int actualizarVenta(String userdb, Venta venta);
 

@@ -1,5 +1,6 @@
 package com.usco.edu.dao.daoImpl;
 
+import java.io.IOException;
 import java.math.BigInteger;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -9,6 +10,7 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 
@@ -18,7 +20,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
+import org.springframework.web.multipart.MultipartFile;
 
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.usco.edu.dao.IConsumoDao;
 import com.usco.edu.entities.Consumo;
 import com.usco.edu.entities.Contrato;
@@ -89,31 +95,45 @@ public class ConsumoDaoImpl implements IConsumoDao {
 	
 	@Override
 	public int obtenerConsumosDiarios(int tipoServicio, int codigoContrato) {
-		
-		String sql = "SELECT COUNT(*) AS cantidad_registros " +
-                "FROM sibusco.restaurante_consumo rc " +
-                "LEFT JOIN sibusco.restaurante_grupo_gabu rgg ON rc.per_codigo = rgg.per_codigo " +
-                "WHERE rc.rts_codigo = ? " +
-                "AND rc.rco_codigo = ? " +
-                "AND rc.rcn_estado = 1 " +
-                "AND rc.rcn_fecha = CONVERT(DATE, GETDATE()) " +
-                "AND rgg.per_codigo IS NULL;";
+	    
+	    String sql = "SELECT COUNT(*) AS cantidad_registros " +
+	            "FROM sibusco.restaurante_consumo rc " +
+	            "LEFT JOIN sibusco.restaurante_grupo_gabu rgg ON rc.per_codigo = rgg.per_codigo " +
+	            "WHERE rc.rts_codigo = ? " +
+	            "AND rc.rco_codigo = ? " +
+	            "AND rc.rcn_estado = 1 " +
+	            "AND rc.rcn_fecha = CONVERT(DATE, GETDATE()) " +
+	            "AND (rgg.per_codigo IS NULL OR " +
+	            "     rgg.rgg_estado = 0 OR " +  
+	            "     (rgg.rgg_vigencia < CONVERT(DATE, GETDATE()) " +
+	            "     AND NOT EXISTS (" +
+	            "         SELECT 1 FROM sibusco.restaurante_grupo_gabu rgg2 " +
+	            "         WHERE rgg2.per_codigo = rgg.per_codigo " +
+	            "         AND rgg2.rgg_vigencia >= CONVERT(DATE, GETDATE())" +
+	            "     ))" +
+	            ");";
 
-		
-		return jdbcTemplate.queryForObject(sql, new Object[]{tipoServicio, codigoContrato}, Integer.class);
+	    return jdbcTemplate.queryForObject(sql, new Object[]{tipoServicio, codigoContrato}, Integer.class);
 	}
 	
 	@Override
 	public int obtenerConsumosDiariosGabus(int tipoServicio, int codigoContrato) {
-		String sql = "SELECT COUNT(*) AS cantidad_registros " +
-                "FROM sibusco.restaurante_consumo rc " +
-                "INNER JOIN sibusco.restaurante_grupo_gabu rgg ON rc.per_codigo = rgg.per_codigo " +
-                "WHERE rc.rts_codigo = ? " +
-                "AND rc.rco_codigo = ? " +
-                "AND rc.rcn_estado = 1 " +
-                "AND rc.rcn_fecha = CONVERT(DATE, GETDATE());";
+		String sql = "WITH VigenciasValidas AS ( " +
+		        "    SELECT rgg.per_codigo, MAX(rgg.rgg_vigencia) AS rgg_vigencia " +
+		        "    FROM sibusco.restaurante_grupo_gabu rgg " +
+		        "    WHERE rgg.rgg_vigencia >= CONVERT(DATE, GETDATE()) " +
+		        "    AND rgg.rgg_estado = 1 " +
+		        "    GROUP BY rgg.per_codigo " +
+		        ") " +
+		        "SELECT COUNT(*) AS cantidad_registros " +
+		        "FROM sibusco.restaurante_consumo rc " +
+		        "INNER JOIN VigenciasValidas vv ON rc.per_codigo = vv.per_codigo " +
+		        "WHERE rc.rco_codigo = ? " +
+		        "AND rc.rts_codigo = ? " +
+		        "AND rc.rcn_estado = 1 " +
+		        "AND rc.rcn_fecha = CONVERT(DATE, GETDATE())";
 		
-		return jdbcTemplate.queryForObject(sql, new Object[]{tipoServicio, codigoContrato}, Integer.class);
+		return jdbcTemplate.queryForObject(sql, new Object[]{codigoContrato,tipoServicio}, Integer.class);
 	}
 	
 	private String[] extraerDatosQr(Qr qr) {
@@ -471,10 +491,10 @@ public class ConsumoDaoImpl implements IConsumoDao {
 	    String sql = 
 	        "DECLARE @perCodigo INT; " +
 	        "DECLARE @codigoVenta INT; " +
-	        "SET @perCodigo = (SELECT e.per_codigo FROM estudiante e WHERE e.est_codigo = ?); " +
+	        "SET @perCodigo = (SELECT e.per_codigo FROM estudiante e WHERE e.est_codigo = ?); " + // Placeholder 1
 	        "IF @perCodigo IS NULL " +
 	        "BEGIN " +
-	        "    SET @perCodigo = (SELECT p.per_codigo FROM persona p WHERE p.per_identificacion = ?); " +
+	        "    SET @perCodigo = (SELECT p.per_codigo FROM persona p WHERE p.per_identificacion = ?); " + // Placeholder 2
 	        "END " +
 	        "SET @codigoVenta = ( " +
 	        "    SELECT rev.rve_codigo " +
@@ -484,8 +504,8 @@ public class ConsumoDaoImpl implements IConsumoDao {
 	        "    INNER JOIN sibusco.restaurante_contrato rc ON rc.rco_codigo = rev.rco_codigo " +
 	        "    INNER JOIN sibusco.restaurante_tipo_contrato rtc ON rtc.rtc_codigo = rc.rtc_codigo " +
 	        "    INNER JOIN dbo.uaa u ON u.uaa_codigo = rev.uaa_codigo " +
-	        "    WHERE rev.per_codigo = @perCodigo AND rev.rco_codigo = ? AND rev.rve_fecha = ? " +
-	        "    AND rev.rts_codigo = ? AND rev.uaa_codigo = ? AND rev.rve_estado = 1 " +
+	        "    WHERE rev.per_codigo = @perCodigo AND rev.rco_codigo = ? AND rev.rve_fecha = ? " + // Placeholder 3, 4
+	        "    AND rev.rts_codigo = ? AND rev.uaa_codigo = ? AND rev.rve_estado = 1 " + // Placeholder 5, 6
 	        "    ); " +
 	        "IF @perCodigo IS NOT NULL " +
 	        "BEGIN " +
@@ -496,25 +516,30 @@ public class ConsumoDaoImpl implements IConsumoDao {
 	        "           WHERE rve_codigo = @codigoVenta; " +
 	        "           INSERT INTO sibusco.restaurante_consumo " +
 	        "           (per_codigo, rve_codigo, rts_codigo, rco_codigo, uaa_codigo, rcn_estado, rcn_fecha, rcn_hora) " +
-	        "           VALUES (@perCodigo, @codigoVenta, ?, ?, ?, ?, ?, ?) " +
+	        "           VALUES (@perCodigo, @codigoVenta, ?, ?, ?, ?, ?, ?) " + // Placeholder 7, 8, 9, 10
 	        "      END " +
 	        "END;";
 
 	    try (Connection connection = getDataSourceFromJdbcTemplate().getConnection();
-	             PreparedStatement pstmt = connection.prepareStatement(sql)){
+	             PreparedStatement pstmt = connection.prepareStatement(sql)) {
 
 	        connection.setAutoCommit(false); // Desactivar auto-commit para manejar transacciones manualmente
 
 	        // Ejecutar el batch de actualizaciones
 	        for (Consumo consumo : consumos) {
-	            pstmt.setString(1, consumo.getPersona().getIdentificacion());
-	            pstmt.setString(2, consumo.getPersona().getIdentificacion());
-	            pstmt.setInt(3, consumo.getTipoServicio().getCodigo());
-	            pstmt.setInt(4, consumo.getContrato().getCodigo());
-	            pstmt.setInt(5, consumo.getDependencia().getCodigo());
-	            pstmt.setInt(6, consumo.getEstado());
-	            pstmt.setDate(7, consumo.getFecha());
-	            pstmt.setTime(8, consumo.getHora());
+	            // Establecemos los valores para los placeholders
+	            pstmt.setString(1, consumo.getPersona().getIdentificacion()); // estudiante
+	            pstmt.setString(2, consumo.getPersona().getIdentificacion()); // persona
+	            pstmt.setInt(3, consumo.getContrato().getCodigo()); // contrato (rco_codigo)
+	            pstmt.setDate(4, consumo.getFecha()); // fecha (rve_fecha)
+	            pstmt.setInt(5, consumo.getTipoServicio().getCodigo()); // tipo de servicio (rts_codigo)
+	            pstmt.setInt(6, consumo.getDependencia().getCodigo()); // dependencia (uaa_codigo)
+	            pstmt.setInt(7, consumo.getTipoServicio().getCodigo()); // tipo de servicio (rts_codigo en restaurante_consumo)
+	            pstmt.setInt(8, consumo.getContrato().getCodigo()); // contrato (rco_codigo en restaurante_consumo)
+	            pstmt.setInt(9, consumo.getDependencia().getCodigo()); // dependencia (uaa_codigo en restaurante_consumo)
+	            pstmt.setInt(10, consumo.getEstado()); // estado del consumo
+	            pstmt.setDate(11, consumo.getFecha()); // fecha del consumo (rcn_fecha)
+	            pstmt.setTime(12, consumo.getHora()); // hora del consumo (rcn_hora)
 
 	            pstmt.addBatch();
 	        }
@@ -543,5 +568,13 @@ public class ConsumoDaoImpl implements IConsumoDao {
 	        return null; // Devuelve null si ocurre una excepción
 	    }
 	}
+	
+	@Override
+	public List<Consumo> convertirJsonAConsumos(MultipartFile jsonData) throws JsonParseException, JsonMappingException, IOException {
+		  ObjectMapper objectMapper = new ObjectMapper();
+	      return Arrays.asList(objectMapper.readValue(jsonData.getInputStream(), Consumo[].class));
+	}
+
+
 
 }

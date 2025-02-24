@@ -1,5 +1,6 @@
 package com.usco.edu.restController;
 
+import java.io.IOException;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,8 +10,12 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.databind.JsonMappingException;
 import com.usco.edu.entities.Venta;
 import com.usco.edu.service.IVentaService;
 
@@ -49,8 +54,11 @@ public class VentaRestController {
 	}
 	
 	@PostMapping(path = "cargue-informacion/{username}")
-	public List<Long> cargueInformacion(@PathVariable String username, @RequestBody List<Venta> ventas) {
-		return ventaService.cargarVentas(username, ventas);
+	public List<Long> cargueInformacion(@PathVariable String username, 
+            @RequestParam("jsonData") MultipartFile jsonData) throws JsonParseException, JsonMappingException, IOException {
+		
+		 List<Venta> ventas_json = ventaService.convertirJsonAVentas(jsonData);
+		return ventaService.cargarVentas(username, ventas_json);
 	}
 
 	@PutMapping(path = "actualizar-venta/{username}")

@@ -1,4 +1,4 @@
-package com.usco.edu.util;
+package com.usco.edu.util;     
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -25,9 +25,9 @@ public class BaseDato {
 
 			DataSource dataSource = null;
 
-			dataSource = (DataSource) ctx.lookup("jboss/datasources/ConsultaDS");
+//			dataSource = (DataSource) ctx.lookup("jboss/datasources/ConsultaDS");
 
-			//dataSource = (DataSource) ctx.lookup("java:jboss/datasources/restauranteWeb_ConsultaDS");
+			dataSource = (DataSource) ctx.lookup("java:jboss/datasources/restauranteWeb_ConsultaDS");
 		
 			conexion = dataSource.getConnection();
 		} catch (Exception e) {
